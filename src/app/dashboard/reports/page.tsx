@@ -5,6 +5,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { ReportsService } from '@/services/reports.service';
+import { exerciseService } from '@/services/exercise.service';
+import HydrationWrapper from '@/components/ui/HydrationWrapper';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -20,7 +22,8 @@ import {
   Filter,
   ArrowUp,
   ArrowDown,
-  Minus
+  Minus,
+  ArrowLeft
 } from 'lucide-react';
 
 interface WorkoutOverview {
@@ -59,6 +62,14 @@ interface PersonalRecord {
 }
 
 export default function ReportsPage() {
+  return (
+    <HydrationWrapper>
+      <ReportsContent />
+    </HydrationWrapper>
+  );
+}
+
+function ReportsContent() {
   const { user, logout, isAuthenticated } = useAuth();
   const router = useRouter();
   
@@ -91,16 +102,29 @@ export default function ReportsPage() {
       setLoading(true);
       setError(null);
 
+      console.log('🔍 Carregando dados dos relatórios...');
+      
       const [overviewData, recordsData] = await Promise.all([
         ReportsService.getWorkoutOverview(dateRange.startDate ? dateRange : undefined),
         ReportsService.getPersonalRecords({ type: 'weight' })
       ]);
       
+      console.log('✅ Dados carregados:', { overviewData, recordsData });
+      
       setOverview(overviewData);
       setRecords(recordsData || []);
-    } catch (err) {
-      setError('Erro ao carregar dados dos relatórios');
-      console.error('Erro:', err);
+    } catch (err: any) {
+      console.error('❌ Erro detalhado:', err);
+      
+      if (err.message?.includes('401') || err.message?.includes('Unauthorized')) {
+        setError('Sessão expirada. Faça login novamente.');
+        // Redirecionar para login após 3 segundos
+        setTimeout(() => {
+          router.push('/login');
+        }, 3000);
+      } else {
+        setError('Erro ao carregar dados dos relatórios: ' + (err.message || 'Erro desconhecido'));
+      }
     } finally {
       setLoading(false);
     }
@@ -108,10 +132,7 @@ export default function ReportsPage() {
 
   const loadExercises = async () => {
     try {
-      const response = await fetch('http://localhost:3000/exercises');
-      if (!response.ok) throw new Error('Erro ao carregar exercícios');
-      
-      const exercisesData = await response.json();
+      const exercisesData = await exerciseService.getAll();
       setExercises(exercisesData?.map((ex: any) => ({ id: ex.id, name: ex.name })) || []);
     } catch (err) {
       console.error('Erro ao carregar exercícios:', err);
@@ -207,14 +228,26 @@ export default function ReportsPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
+        {/* Header da página */}
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            📊 Relatórios de Treino
-          </h2>
-          <p className="text-gray-600">
-            Acompanhe sua evolução e progresso nos exercícios.
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                📊 Relatórios de Treino
+              </h2>
+              <p className="text-gray-600">
+                Acompanhe sua evolução e progresso nos exercícios.
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              onClick={() => router.push('/dashboard')}
+              className="flex items-center space-x-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Voltar ao Dashboard</span>
+            </Button>
+          </div>
         </div>
 
         {/* Date Filter */}

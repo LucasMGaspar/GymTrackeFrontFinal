@@ -1,18 +1,17 @@
 // src/services/reports.service.ts
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+import api from '@/lib/api';
 
-export interface ReportParams {
-  startDate?: string;
-  endDate?: string;
-  exerciseId?: string;
-  exerciseIds?: string[];
-  metric?: 'weight' | 'reps' | 'volume';
-  seriesType?: 'max' | 'average' | 'all';
-  type?: 'weight' | 'reps' | 'volume';
-  period?: 'week' | 'month' | 'year';
-  format?: 'json' | 'summary';
+function getAuthHeader() {
+  const token = localStorage.getItem('access_token');
+  if (!token) {
+    console.error('❌ Token não encontrado no localStorage');
+    throw new Error('Usuário não autenticado');
+  }
+  console.log('🔑 Token encontrado:', token.substring(0, 20) + '...');
+  return { Authorization: `Bearer ${token}` };
 }
 
+// Interfaces para tipagem
 export interface WorkoutOverview {
   period: { startDate: string; endDate: string };
   totals: { workouts: number; exercises: number; series: number; volume: number };
@@ -23,38 +22,19 @@ export interface WorkoutOverview {
 export interface ExerciseEvolution {
   exerciseName: string;
   exerciseId: string;
-  seriesType: string;
-  period: { startDate: string; endDate: string; totalSessions: number };
   data: Array<{
     date: string;
-    dayOfWeek: string;
-    maxWeight?: { weight: number; reps: number; volume: number };
-    maxReps?: { weight: number; reps: number; volume: number };
+    maxWeight?: { weight: number; reps: number };
+    maxReps?: { weight: number; reps: number };
     bestVolume?: { weight: number; reps: number; volume: number };
   }>;
-  analysis: {
-    weightProgress: { initial: number; current: number; difference: number; percentage: number };
-    repsProgress: { initial: number; current: number; difference: number; percentage: number };
-    volumeProgress: { initial: number; current: number; difference: number; percentage: number };
-    overallTrend: 'improving' | 'mixed' | 'declining';
-    sessionsAnalyzed: number;
+  analysis?: {
+    weightProgress?: { initial: number; current: number; percentage: number };
+    repsProgress?: { initial: number; current: number; percentage: number };
+    volumeProgress?: { initial: number; current: number; percentage: number };
+    overallTrend?: 'improving' | 'mixed' | 'declining';
+    sessionsAnalyzed?: number;
   };
-}
-
-export interface ExerciseComparison {
-  metric: string;
-  period: { startDate: string; endDate: string };
-  exercises: Array<{
-    exerciseId: string;
-    exerciseName: string;
-    totalSessions: number;
-    improvement: { difference: number; percentage: number; initialValue: number; currentValue: number };
-  }>;
-  ranking: Array<{
-    position: number;
-    exerciseName: string;
-    improvement: { percentage: number };
-  }>;
 }
 
 export interface PersonalRecord {
@@ -64,25 +44,35 @@ export interface PersonalRecord {
     date: string;
     reps?: number;
     weight?: number;
-    basedOn?: string;
   };
   type: string;
 }
 
-export interface MuscleGroupAnalysis {
-  muscleGroups: Array<{
-    name: string;
-    workouts: number;
-    exercises: number;
+export interface ExerciseProgress {
+  exerciseId: string;
+  exerciseName: string;
+  sessions: Array<{
+    date: string;
     series: number;
+    maxWeight: number;
+    maxReps: number;
     volume: number;
-    lastWorkout: string;
+    seriesData: Array<{
+      weight: number;
+      reps: number;
+      difficulty: number;
+    }>;
   }>;
-  total: number;
+  progress: {
+    maxWeight: number;
+    maxReps: number;
+    maxVolume: number;
+    totalSeries: number;
+  };
 }
 
 export interface WorkoutFrequency {
-  period: string;
+  period: 'week' | 'month' | 'year';
   data: Array<{
     period: string;
     count: number;
@@ -94,86 +84,407 @@ export interface WorkoutFrequency {
   };
 }
 
-export class ReportsService {
-  private static async fetchWithParams(endpoint: string, params?: ReportParams) {
-    const url = new URL(`${API_BASE_URL}/reports/${endpoint}`);
-    
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          if (Array.isArray(value)) {
-            url.searchParams.append(key, value.join(','));
-          } else {
-            url.searchParams.append(key, value.toString());
-          }
-        }
+export interface MuscleGroupAnalysis {
+  muscleGroups: Array<{
+    name: string;
+    workouts: number;
+    exercises: number;
+    series: number;
+    volume: number;
+    lastWorkout: string | null;
+  }>;
+  total: number;
+}
+
+export interface VolumeAnalysis {
+  data: Array<{
+    date: string;
+    exerciseName: string;
+    volume: number;
+    series: number;
+    avgWeight: number;
+    totalReps: number;
+  }>;
+  summary: {
+    totalVolume: number;
+    averageVolume: number;
+    maxVolume: number;
+    trend: 'up' | 'down' | 'stable';
+  };
+}
+
+export interface WorkoutDuration {
+  data: Array<{
+    date: string;
+    duration: number;
+    dayOfWeek: string;
+  }>;
+  summary: {
+    average: number;
+    shortest: number;
+    longest: number;
+    total: number;
+  };
+}
+
+export interface WorkoutConsistency {
+  data: Array<{
+    dayOfWeek: string;
+    count: number;
+    percentage: number;
+  }>;
+  mostActiveDay: {
+    dayOfWeek: string;
+    count: number;
+    percentage: number;
+  };
+  leastActiveDay: {
+    dayOfWeek: string;
+    count: number;
+    percentage: number;
+  };
+}
+
+export interface ExerciseComparison {
+  metric: 'weight' | 'reps' | 'volume';
+  period: {
+    startDate: string;
+    endDate: string;
+  };
+  exercises: Array<{
+    exerciseId: string;
+    exerciseName: string;
+    totalSessions: number;
+    latestData: any;
+    firstData: any;
+    improvement: {
+      difference: number;
+      percentage: number;
+      initialValue: number;
+      currentValue: number;
+    };
+  }>;
+  ranking: Array<{
+    position: number;
+    exerciseName: string;
+    improvement: any;
+  }>;
+}
+
+export interface StrengthAnalysis {
+  exercises: Array<{
+    exerciseName: string;
+    exerciseId: string;
+    strengthCurve: Array<{
+      date: string;
+      weight: number;
+      reps: number;
+      estimated1RM: number;
+      volume: number;
+    }>;
+    records: {
+      heaviest1Rep: { weight: number; date: string } | null;
+      heaviest5Reps: { weight: number; reps: number; date: string } | null;
+      heaviest10Reps: { weight: number; reps: number; date: string } | null;
+      estimated1RM: { value: number; basedOn: string; date: string } | null;
+    };
+  }>;
+  summary: {
+    totalExercises: number;
+    overallStrengthTrend: 'strong_improvement' | 'improvement' | 'stable' | 'decline' | 'no_data';
+  };
+}
+
+export const ReportsService = {
+  // Relatório geral de treinos
+  async getWorkoutOverview(dateRange?: { startDate?: string; endDate?: string }): Promise<WorkoutOverview> {
+    try {
+      const params = new URLSearchParams();
+      if (dateRange?.startDate) params.append('startDate', dateRange.startDate);
+      if (dateRange?.endDate) params.append('endDate', dateRange.endDate);
+      
+      const queryString = params.toString();
+      const url = `/reports/overview${queryString ? `?${queryString}` : ''}`;
+      
+      const response = await api.get(url, {
+        headers: getAuthHeader(),
       });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao buscar overview dos treinos:', error);
+      throw error;
     }
+  },
 
-    const response = await fetch(url.toString());
-    if (!response.ok) {
-      throw new Error(`Erro na API: ${response.statusText}`);
+  // Progresso por exercício
+  async getExerciseProgress(
+    exerciseId?: string, 
+    dateRange?: { startDate?: string; endDate?: string }
+  ): Promise<ExerciseProgress[]> {
+    try {
+      const params = new URLSearchParams();
+      if (exerciseId) params.append('exerciseId', exerciseId);
+      if (dateRange?.startDate) params.append('startDate', dateRange.startDate);
+      if (dateRange?.endDate) params.append('endDate', dateRange.endDate);
+      
+      const queryString = params.toString();
+      const url = `/reports/exercise-progress${queryString ? `?${queryString}` : ''}`;
+      
+      const response = await api.get(url, {
+        headers: getAuthHeader(),
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao buscar progresso dos exercícios:', error);
+      throw error;
     }
-    return response.json();
-  }
+  },
 
-  // Relatório geral
-  static async getWorkoutOverview(params?: ReportParams): Promise<WorkoutOverview> {
-    return this.fetchWithParams('overview', params);
-  }
-
-  // Evolução detalhada de exercício
-  static async getExerciseEvolution(exerciseId: string, params?: ReportParams): Promise<ExerciseEvolution> {
-    return this.fetchWithParams('evolution', { ...params, exerciseId });
-  }
-
-  // Comparar exercícios
-  static async compareExercises(exerciseIds: string[], metric: 'weight' | 'reps' | 'volume' = 'weight', params?: ReportParams): Promise<ExerciseComparison> {
-    return this.fetchWithParams('compare-exercises', { ...params, exerciseIds, metric });
-  }
-
-  // Recordes pessoais
-  static async getPersonalRecords(params?: ReportParams): Promise<PersonalRecord[]> {
-    return this.fetchWithParams('personal-records', params);
-  }
-
-  // Progresso de exercícios
-  static async getExerciseProgress(params?: ReportParams) {
-    return this.fetchWithParams('exercise-progress', params);
-  }
+  // Evolução detalhada de peso e repetições
+  async getExerciseEvolution(
+    exerciseId: string,
+    options?: {
+      seriesType?: 'max' | 'average' | 'all';
+      startDate?: string;
+      endDate?: string;
+    }
+  ): Promise<ExerciseEvolution> {
+    try {
+      const params = new URLSearchParams();
+      params.append('exerciseId', exerciseId);
+      if (options?.seriesType) params.append('seriesType', options.seriesType);
+      if (options?.startDate) params.append('startDate', options.startDate);
+      if (options?.endDate) params.append('endDate', options.endDate);
+      
+      const url = `/reports/evolution?${params.toString()}`;
+      
+      const response = await api.get(url, {
+        headers: getAuthHeader(),
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao buscar evolução do exercício:', error);
+      throw error;
+    }
+  },
 
   // Frequência de treinos
-  static async getWorkoutFrequency(params?: ReportParams): Promise<WorkoutFrequency> {
-    return this.fetchWithParams('frequency', params);
-  }
+  async getWorkoutFrequency(
+    period: 'week' | 'month' | 'year' = 'month',
+    dateRange?: { startDate?: string; endDate?: string }
+  ): Promise<WorkoutFrequency> {
+    try {
+      const params = new URLSearchParams();
+      params.append('period', period);
+      if (dateRange?.startDate) params.append('startDate', dateRange.startDate);
+      if (dateRange?.endDate) params.append('endDate', dateRange.endDate);
+      
+      const url = `/reports/frequency?${params.toString()}`;
+      
+      const response = await api.get(url, {
+        headers: getAuthHeader(),
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao buscar frequência dos treinos:', error);
+      throw error;
+    }
+  },
 
   // Análise por grupo muscular
-  static async getMuscleGroupAnalysis(params?: ReportParams): Promise<MuscleGroupAnalysis> {
-    return this.fetchWithParams('muscle-groups', params);
-  }
+  async getMuscleGroupAnalysis(
+    dateRange?: { startDate?: string; endDate?: string }
+  ): Promise<MuscleGroupAnalysis> {
+    try {
+      const params = new URLSearchParams();
+      if (dateRange?.startDate) params.append('startDate', dateRange.startDate);
+      if (dateRange?.endDate) params.append('endDate', dateRange.endDate);
+      
+      const queryString = params.toString();
+      const url = `/reports/muscle-groups${queryString ? `?${queryString}` : ''}`;
+      
+      const response = await api.get(url, {
+        headers: getAuthHeader(),
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao buscar análise dos grupos musculares:', error);
+      throw error;
+    }
+  },
 
   // Análise de volume
-  static async getVolumeAnalysis(params?: ReportParams) {
-    return this.fetchWithParams('volume', params);
-  }
+  async getVolumeAnalysis(
+    exerciseId?: string,
+    dateRange?: { startDate?: string; endDate?: string }
+  ): Promise<VolumeAnalysis> {
+    try {
+      const params = new URLSearchParams();
+      if (exerciseId) params.append('exerciseId', exerciseId);
+      if (dateRange?.startDate) params.append('startDate', dateRange.startDate);
+      if (dateRange?.endDate) params.append('endDate', dateRange.endDate);
+      
+      const queryString = params.toString();
+      const url = `/reports/volume${queryString ? `?${queryString}` : ''}`;
+      
+      const response = await api.get(url, {
+        headers: getAuthHeader(),
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao buscar análise de volume:', error);
+      throw error;
+    }
+  },
+
+  // Recordes pessoais
+  async getPersonalRecords(options?: {
+    exerciseId?: string;
+    type?: 'weight' | 'reps' | 'volume';
+  }): Promise<PersonalRecord[]> {
+    try {
+      const params = new URLSearchParams();
+      if (options?.exerciseId) params.append('exerciseId', options.exerciseId);
+      if (options?.type) params.append('type', options.type);
+      
+      const queryString = params.toString();
+      const url = `/reports/personal-records${queryString ? `?${queryString}` : ''}`;
+      
+      const response = await api.get(url, {
+        headers: getAuthHeader(),
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao buscar recordes pessoais:', error);
+      throw error;
+    }
+  },
 
   // Duração dos treinos
-  static async getWorkoutDuration(params?: ReportParams) {
-    return this.fetchWithParams('duration', params);
-  }
+  async getWorkoutDuration(
+    dateRange?: { startDate?: string; endDate?: string }
+  ): Promise<WorkoutDuration> {
+    try {
+      const params = new URLSearchParams();
+      if (dateRange?.startDate) params.append('startDate', dateRange.startDate);
+      if (dateRange?.endDate) params.append('endDate', dateRange.endDate);
+      
+      const queryString = params.toString();
+      const url = `/reports/duration${queryString ? `?${queryString}` : ''}`;
+      
+      const response = await api.get(url, {
+        headers: getAuthHeader(),
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao buscar duração dos treinos:', error);
+      throw error;
+    }
+  },
 
-  // Consistência
-  static async getWorkoutConsistency(params?: ReportParams) {
-    return this.fetchWithParams('consistency', params);
-  }
+  // Consistência (dias da semana)
+  async getWorkoutConsistency(
+    dateRange?: { startDate?: string; endDate?: string }
+  ): Promise<WorkoutConsistency> {
+    try {
+      const params = new URLSearchParams();
+      if (dateRange?.startDate) params.append('startDate', dateRange.startDate);
+      if (dateRange?.endDate) params.append('endDate', dateRange.endDate);
+      
+      const queryString = params.toString();
+      const url = `/reports/consistency${queryString ? `?${queryString}` : ''}`;
+      
+      const response = await api.get(url, {
+        headers: getAuthHeader(),
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao buscar consistência dos treinos:', error);
+      throw error;
+    }
+  },
+
+  // Comparar múltiplos exercícios
+  async compareExercises(
+    exerciseIds: string[],
+    metric: 'weight' | 'reps' | 'volume' = 'weight',
+    dateRange?: { startDate?: string; endDate?: string }
+  ): Promise<ExerciseComparison> {
+    try {
+      const params = new URLSearchParams();
+      params.append('exerciseIds', exerciseIds.join(','));
+      params.append('metric', metric);
+      if (dateRange?.startDate) params.append('startDate', dateRange.startDate);
+      if (dateRange?.endDate) params.append('endDate', dateRange.endDate);
+      
+      const url = `/reports/compare-exercises?${params.toString()}`;
+      
+      const response = await api.get(url, {
+        headers: getAuthHeader(),
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao comparar exercícios:', error);
+      throw error;
+    }
+  },
 
   // Análise de força
-  static async getStrengthAnalysis(params?: ReportParams) {
-    return this.fetchWithParams('strength-analysis', params);
-  }
+  async getStrengthAnalysis(
+    exerciseId?: string,
+    dateRange?: { startDate?: string; endDate?: string }
+  ): Promise<StrengthAnalysis> {
+    try {
+      const params = new URLSearchParams();
+      if (exerciseId) params.append('exerciseId', exerciseId);
+      if (dateRange?.startDate) params.append('startDate', dateRange.startDate);
+      if (dateRange?.endDate) params.append('endDate', dateRange.endDate);
+      
+      const queryString = params.toString();
+      const url = `/reports/strength-analysis${queryString ? `?${queryString}` : ''}`;
+      
+      const response = await api.get(url, {
+        headers: getAuthHeader(),
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao buscar análise de força:', error);
+      throw error;
+    }
+  },
 
   // Relatório completo
-  static async getCompleteReport(params?: ReportParams) {
-    return this.fetchWithParams('complete', params);
-  }
-}
+  async getCompleteReport(
+    format: 'json' | 'summary' = 'summary',
+    dateRange?: { startDate?: string; endDate?: string }
+  ): Promise<any> {
+    try {
+      const params = new URLSearchParams();
+      params.append('format', format);
+      if (dateRange?.startDate) params.append('startDate', dateRange.startDate);
+      if (dateRange?.endDate) params.append('endDate', dateRange.endDate);
+      
+      const url = `/reports/complete?${params.toString()}`;
+      
+      const response = await api.get(url, {
+        headers: getAuthHeader(),
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao buscar relatório completo:', error);
+      throw error;
+    }
+  },
+};

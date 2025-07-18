@@ -20,7 +20,8 @@ import {
   User,
   LogOut,
   ChevronRight,
-  Zap
+  Zap,
+  FileText
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -127,6 +128,11 @@ export default function DashboardPage() {
 
   const handleViewHistory = () => {
     router.push('/dashboard/history');
+  };
+
+  // NOVA FUNÇÃO: Redirecionar para relatórios
+  const handleViewReports = () => {
+    router.push('/dashboard/reports');
   };
 
   if (loading) {
@@ -261,8 +267,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        {/* Quick Actions - MODIFICADO: Agora com 4 colunas para incluir Relatórios */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-xl p-6 shadow-sm border hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
@@ -314,6 +320,25 @@ export default function DashboardPage() {
               onClick={handleViewHistory}
             >
               Ver Histórico
+            </Button>
+          </div>
+
+          {/* NOVO: Card de Relatórios */}
+          <div className="bg-white rounded-xl p-6 shadow-sm border hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
+                <FileText className="h-6 w-6 text-indigo-600" />
+              </div>
+              <ChevronRight className="h-5 w-5 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Relatórios</h3>
+            <p className="text-gray-600 text-sm mb-4">Análises detalhadas e progresso</p>
+            <Button 
+              variant="secondary"
+              className="w-full"
+              onClick={handleViewReports}
+            >
+              Ver Relatórios
             </Button>
           </div>
         </div>

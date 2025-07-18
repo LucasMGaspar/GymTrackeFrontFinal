@@ -16,17 +16,18 @@ export interface CreateExerciseData {
   instructions?: string;
 }
 
+// ALTERADO: Chaves agora em minúscula para compatibilidade com backend
 export const MUSCLE_GROUPS = {
-  CHEST: 'Peito',
-  BACK: 'Costas',
-  SHOULDERS: 'Ombros',
-  BICEPS: 'Bíceps',
-  TRICEPS: 'Tríceps',
-  LEGS: 'Pernas',
-  GLUTES: 'Glúteos',
-  ABS: 'Abdômen',
-  CALVES: 'Panturrilha',
-  CARDIO: 'Cardio',
+  chest: 'Peito',
+  back: 'Costas',
+  shoulders: 'Ombros',
+  biceps: 'Bíceps',
+  triceps: 'Tríceps',
+  legs: 'Pernas',
+  glutes: 'Glúteos',
+  abs: 'Abdômen',
+  calves: 'Panturrilha',
+  cardio: 'Cardio',
 } as const;
 
 export type MuscleGroup = keyof typeof MUSCLE_GROUPS;

@@ -129,18 +129,21 @@ function CreateExerciseContent() {
         instructions: formData.instructions || undefined,
       };
 
+      console.log('🚀 Criando exercício:', exerciseData);
       await exerciseService.create(exerciseData);
+      console.log('✅ Exercício criado com sucesso!');
 
       setSuccess(true);
       
-      // Redirecionar após 2 segundos
+      // ALTERADO: Redirecionar para o dashboard após 1.5 segundos
       setTimeout(() => {
-        router.push('/dashboard/exercises');
-      }, 2000);
+        console.log('🔄 Redirecionando para dashboard...');
+        router.push('/dashboard');
+      }, 1500);
 
     } catch (error: any) {
-      console.error('Erro ao criar exercício:', error);
-      setErrors({ submit: error.message || 'Erro ao criar exercício' });
+      console.error('❌ Erro ao criar exercício:', error);
+      setErrors({ submit: error.message || 'Erro ao criar exercício. Tente novamente.' });
     } finally {
       setLoading(false);
     }
@@ -149,10 +152,10 @@ function CreateExerciseContent() {
   const handleCancel = () => {
     if (formData.name || formData.muscleGroups.length > 0 || formData.equipment || formData.instructions) {
       if (confirm('Tem certeza que deseja cancelar? Todas as informações serão perdidas.')) {
-        router.push('/dashboard/exercises');
+        router.push('/dashboard');
       }
     } else {
-      router.push('/dashboard/exercises');
+      router.push('/dashboard');
     }
   };
 
@@ -164,7 +167,7 @@ function CreateExerciseContent() {
             <CheckCircle className="h-8 w-8 text-green-600" />
           </div>
           <h3 className="text-lg font-medium text-gray-900 mb-2">Exercício criado com sucesso!</h3>
-          <p className="text-gray-600 mb-4">Redirecionando para a lista de exercícios...</p>
+          <p className="text-gray-600 mb-4">Redirecionando para o dashboard...</p>
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600 mx-auto"></div>
         </div>
       </div>
@@ -247,7 +250,7 @@ function CreateExerciseContent() {
             </div>
             <Button
               variant="secondary"
-              onClick={handleCancel}
+              onClick={() => router.push('/dashboard')}
               className="flex items-center space-x-2"
             >
               <ArrowLeft className="h-4 w-4" />

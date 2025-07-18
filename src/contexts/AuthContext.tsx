@@ -15,20 +15,24 @@ interface AuthContextData {
 
 const AuthContext = createContext<AuthContextData>({} as AuthContextData);
 
-export const useAuth = () => {
-  return useContext(AuthContext);
-};
+export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('token');  // ← USAR 'token'
     const userData = localStorage.getItem('user');
     
     if (token && userData) {
-      setUser(JSON.parse(userData));
+      try {
+        setUser(JSON.parse(userData));
+      } catch (error) {
+        console.error('Erro ao fazer parse do usuário:', error);
+        localStorage.removeItem('token');  // ← USAR 'token'
+        localStorage.removeItem('user');
+      }
     }
     
     setLoading(false);
@@ -38,11 +42,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const response = await authService.login(data);
       
-      localStorage.setItem('token', response.access_token);
+      localStorage.setItem('token', response.access_token);  // ← USAR 'token'
       localStorage.setItem('user', JSON.stringify(response.user));
       
       setUser(response.user);
     } catch (error) {
+      console.error('Erro no login:', error);
       throw error;
     }
   };
@@ -51,27 +56,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await authService.register(data);
     } catch (error) {
+      console.error('Erro no registro:', error);
       throw error;
     }
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    localStorage.removeItem('token');  // ← USAR 'token'
     localStorage.removeItem('user');
     setUser(null);
-  };
-
-  const value = {
-    user,
-    loading,
-    login,
-    register,
-    logout,
-    isAuthenticated: !!user,
+    window.location.href = '/login';
   };
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login,
+        register,
+        logout,
+        isAuthenticated: !!user,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

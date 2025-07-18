@@ -1,4 +1,3 @@
-// src/services/history.service.ts
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export interface HistoryFilters {
@@ -74,9 +73,19 @@ export interface MuscleGroupStat {
 }
 
 export class HistoryService {
-  private static async fetchWithParams(endpoint: string, params?: Record<string, any>) {
+  private static getAuthHeader() {
+    const token = localStorage.getItem('token');  // ← USAR 'token'
+    if (!token) {
+      throw new Error('Usuário não autenticado');
+    }
+    return { Authorization: `Bearer ${token}` };
+  }
+
+  private static async fetchWithParams<T>(
+    endpoint: string,
+    params?: Record<string, any>,
+  ): Promise<T> {
     const url = new URL(`${API_BASE_URL}/history/${endpoint}`);
-    
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined && value !== null && value !== '') {
@@ -85,18 +94,20 @@ export class HistoryService {
       });
     }
 
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), {
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.getAuthHeader(),
+      },
+    });
     if (!response.ok) {
-      throw new Error(`Erro na API: ${response.statusText}`);
+      throw new Error(`Erro na API: ${response.status} ${response.statusText}`);
     }
     return response.json();
   }
 
-  // Listar histórico de treinos
   static async getWorkoutHistory(filters?: HistoryFilters) {
-    // Filtrar valores vazios e preparar parâmetros
     const cleanFilters: Record<string, any> = {};
-    
     if (filters) {
       Object.entries(filters).forEach(([key, value]) => {
         if (value !== undefined && value !== null && value !== '') {
@@ -104,48 +115,49 @@ export class HistoryService {
         }
       });
     }
-    
     return this.fetchWithParams('', cleanFilters);
   }
 
-  // Detalhes de um treino específico
-  static async getWorkoutDetails(workoutId: string): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/history/${workoutId}`);
+  static async getWorkoutDetails(workoutId: string) {
+    const response = await fetch(`${API_BASE_URL}/history/${workoutId}`, {
+      headers: this.getAuthHeader(),
+    });
     if (!response.ok) {
       throw new Error(`Erro ao buscar detalhes: ${response.statusText}`);
     }
     return response.json();
   }
 
-  // Estatísticas do histórico
-  static async getHistoryStats(period: 'week' | 'month' | 'year' | 'all' = 'month', startDate?: string, endDate?: string) {
+  static async getHistoryStats(
+    period: 'week' | 'month' | 'year' | 'all' = 'month',
+    startDate?: string,
+    endDate?: string,
+  ) {
     return this.fetchWithParams('stats/overview', { period, startDate, endDate });
   }
 
-  // Padrão semanal
-  static async getWeeklyPattern(startDate?: string, endDate?: string): Promise<WeeklyPattern[]> {
+  static async getWeeklyPattern(startDate?: string, endDate?: string) {
     return this.fetchWithParams('stats/weekly-pattern', { startDate, endDate });
   }
 
-  // Estatísticas de grupos musculares
-  static async getMuscleGroupStats(startDate?: string, endDate?: string): Promise<MuscleGroupStat[]> {
+  static async getMuscleGroupStats(startDate?: string, endDate?: string) {
     return this.fetchWithParams('stats/muscle-groups', { startDate, endDate });
   }
 
-  // Deletar treino
   static async deleteWorkout(workoutId: string) {
     const response = await fetch(`${API_BASE_URL}/history/${workoutId}`, {
       method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.getAuthHeader(),
+      },
     });
-    
     if (!response.ok) {
       throw new Error(`Erro ao deletar treino: ${response.statusText}`);
     }
-    
     return response.json();
   }
 
-  // Duplicar treino
   static async duplicateWorkout(workoutId: string) {
     return this.fetchWithParams(`${workoutId}/duplicate`);
   }
